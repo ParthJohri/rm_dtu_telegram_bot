@@ -3,3 +3,4 @@ telebot
 selenium
 openai
 bs4
+chromedriver-autoinstaller
