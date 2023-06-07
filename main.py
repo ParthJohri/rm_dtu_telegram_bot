@@ -2,19 +2,16 @@ import os
 import time
 import openai
 import telebot
-import threading
 import pymongo
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from dotenv import load_dotenv
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-project_folder = os.path.expanduser('~')  # adjust as appropriate
-load_dotenv(os.path.join(project_folder, '.env'))
+
 DB_USERNAME = os.environ['DATABASE']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 openai.api_key = os.environ['OPEN_AI_KEY']
@@ -213,213 +210,211 @@ def handle_callback(call):
       bot.send_message(call.message.chat.id, "Search")
       search(call.message)
 
-def jobs_updates():
+chrome_options = Options()
+chrome_options.add_argument("--window-size=1920,1080")
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--disable-dev-shm-usage')
+driver = webdriver.Chrome(options=chrome_options)
 
-  chrome_options = Options()
-  chrome_options.add_argument("--window-size=1920,1080")
-  chrome_options.add_argument('--no-sandbox')
-  chrome_options.add_argument('--headless')
-  chrome_options.add_argument('--disable-dev-shm-usage')
-  driver = webdriver.Chrome(options=chrome_options)
+# global scraped_data, previous_db, previous_job, all_data, user_ids, branches
 
-  global scraped_data, previous_db, previous_job, all_data, user_ids, branches
+loginurl = ('https://rm.dtu.ac.in/api/auth/login')
+secure_url = ('https://www.rm.dtu.ac.in/app/dashboard')
 
-  loginurl = ('https://rm.dtu.ac.in/api/auth/login')
-  secure_url = ('https://www.rm.dtu.ac.in/app/dashboard')
+# Login Credentials
 
-  # Login Credentials
+rollNo = str(os.environ('ROLLN'))
+password = str(os.environ('PASSW'))
 
-  rollNo = str(os.environ('ROLLN'))
-  password = str(os.environ('PASSW'))
+# Navigate to the desired website
+driver.get(loginurl)
 
-  # Navigate to the desired website
-  driver.get(loginurl)
+RN = driver.find_element(
+  By.CLASS_NAME, 'css-1t8l2tu-MuiInputBase-input-MuiOutlinedInput-input')
+RN.send_keys(rollNo)
 
-  RN = driver.find_element(
-    By.CLASS_NAME, 'css-1t8l2tu-MuiInputBase-input-MuiOutlinedInput-input')
-  RN.send_keys(rollNo)
+SK = driver.find_element(
+  By.CLASS_NAME, 'css-nxo287-MuiInputBase-input-MuiOutlinedInput-input')
+SK.send_keys(password)
 
-  SK = driver.find_element(
-    By.CLASS_NAME, 'css-nxo287-MuiInputBase-input-MuiOutlinedInput-input')
-  SK.send_keys(password)
+# time.sleep(5)
+submit_button = driver.find_element(
+  By.XPATH, "//button[@type='submit']"
+)  # Replace with the actual XPath or other locator of the submit button
+submit_button.send_keys(Keys.ENTER)
+time.sleep(5)
 
-  # time.sleep(5)
-  submit_button = driver.find_element(
-    By.XPATH, "//button[@type='submit']"
-  )  # Replace with the actual XPath or other locator of the submit button
-  submit_button.send_keys(Keys.ENTER)
-  time.sleep(5)
+print("logged in successfully")
 
-  print("logged in successfully")
+# Get the current URL
+current_url = driver.current_url
 
-  # Get the current URL
-  current_url = driver.current_url
+# Display the current URL
+print("Current URL:", current_url)
 
-  # Display the current URL
-  print("Current URL:", current_url)
+# Get the page source from Selenium
+page_source = driver.page_source
 
-  # Get the page source from Selenium
-  page_source = driver.page_source
+soup = BeautifulSoup(page_source, 'html.parser')
 
-  soup = BeautifulSoup(page_source, 'html.parser')
+# Find all div elements with a specific class name
+div_elements = soup.find_all('div', class_='css-wdtwov-MuiGrid-root')
 
-  # Find all div elements with a specific class name
-  div_elements = soup.find_all('div', class_='css-wdtwov-MuiGrid-root')
+div_elements_first_three = div_elements[:2]
 
-  div_elements_first_three = div_elements[:2]
-
-  rev_div_elements = div_elements_first_three[::-1]
-  all_data = "-------RM Dashboard-------\n"
-  # Iterate over the div elements and perform actions
-  for div in rev_div_elements:
-    # Perform actions on each div element
-    companyname = div.find('p', class_='css-1v1tjum-MuiTypography-root').text
-    companystatus = div.find_all('p', class_='css-ahj2mt-MuiTypography-root')
-    # Print the name and status
-    nm = "Name: " + companyname + "\n"
-    pt = ""
-    for p in companystatus:
-      pt += p.text + "\n"
-    current_db = nm + pt + "\n"
-    all_data += current_db +"---------------------------------\n\n"
-  if previous_db == current_db:
-    previous_db = current_db
-  else:
-    previous_db = current_db
-    rmmessage = "-------RM Dashboard-------\n"
-    scraped_data = rmmessage + current_db + "---------------------------------\n"
-    for user_id in user_ids:
-      update(user_id,scraped_data)
-
-  # Jobs Panel
-  time.sleep(1)
-
-  jobs = driver.find_element(By.XPATH, ".//a[@href='/app/jobs']")
-
-  jobs.send_keys(Keys.ENTER)
-
-  time.sleep(1)
-
-  # Get the current URL
-  current_url = driver.current_url
-
-  # Display the current URL
-  # print("Current URL:", current_url)
-
-  page_jobs_source = driver.page_source
-
-  soup = BeautifulSoup(page_jobs_source, 'html.parser')
-
-  # Find all div elements with a specific class name
-  div_elements = soup.find_all('div', class_='css-wdtwov-MuiGrid-root')
-
-  div_elements_first_three = div_elements[:3]
-  latest_job = div_elements[0]
-  rev_div_elements = div_elements_first_three[::-1]
-  all_data += "--------Jobs Updated--------\n"
-  # Iterate over the div elements and perform actions
-  div=latest_job
-  # for div in rev_div_elements:
+rev_div_elements = div_elements_first_three[::-1]
+all_data = "-------RM Dashboard-------\n"
+# Iterate over the div elements and perform actions
+for div in rev_div_elements:
   # Perform actions on each div element
-  companyname = div.find('div', class_='css-dsnyvo')
-  companystatus = div.find('div', class_='css-155ff3i')
-  p_job_status = companystatus.find_all(
-    'p', class_="css-ahj2mt-MuiTypography-root")
-  nam = "Name: " + companyname.h5.text + "\n"
-
+  companyname = div.find('p', class_='css-1v1tjum-MuiTypography-root').text
+  companystatus = div.find_all('p', class_='css-ahj2mt-MuiTypography-root')
   # Print the name and status
-  ptot = ""
-  for job_status in p_job_status:
-    ptot += "" + job_status.text + "" + "\n"
-  current_job = nam + ptot
-  print("Know More")
-  KMore = driver.find_element(By.XPATH, '/html/body/div/div/div[3]/div/div/div/div[1]/div/div/div[2]/div/div[1]/div/div/div[2]/a[1]/button')
-  KMore.send_keys(Keys.ENTER)
-  time.sleep(5)
-  current_url = driver.current_url
-  print(current_url)
+  nm = "Name: " + companyname + "\n"
+  pt = ""
+  for p in companystatus:
+    pt += p.text + "\n"
+  current_db = nm + pt + "\n"
+  all_data += current_db +"---------------------------------\n\n"
+if previous_db == current_db:
+  previous_db = current_db
+else:
+  previous_db = current_db
+  rmmessage = "-------RM Dashboard-------\n"
+  scraped_data = rmmessage + current_db + "---------------------------------\n"
+  for user_id in user_ids:
+    update(user_id,scraped_data)
 
-  page_jobs_source = driver.page_source
-  soup = BeautifulSoup(page_jobs_source, 'html.parser')
-  # Extract form link and close date
-  form_link = soup.find('p',class_='MuiTypography-root MuiTypography-body1 css-ahj2mt-MuiTypography-root').text
+# Jobs Panel
+time.sleep(1)
 
-  fdes=form_link
-  # Extract close date from form
-  # close_date = soup.find_all('p', class_='MuiTypography-root MuiTypography-body1 css-1qqynwt-MuiTypography-root')
-  # ctime=""
+jobs = driver.find_element(By.XPATH, ".//a[@href='/app/jobs']")
 
-  # for close_date in close_date:
-  #     ctime+= close_date.text+"\n"
+jobs.send_keys(Keys.ENTER)
 
-  # Extract job description
-  anchor_element = soup.find('a')
-  link = anchor_element['href']
-  job_description = soup.find('p', class_="MuiTypography-root MuiTypography-body1 css-z2eky3-MuiTypography-root").text
-  jdes=job_description
-  print(jdes)
-  # Display the extracted job description
+time.sleep(1)
 
-  # Find the dropdown menu element (div)
-  wait = WebDriverWait(driver, 10)  # Set an appropriate waiting time
-  # Locate the element and wait until it is clickable
-  element = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div/div/div[3]/div/div/div/div[8]/table/tbody/tr[1]/td[2]/div/div/div/div")))
+# Get the current URL
+current_url = driver.current_url
 
-  # Click on the element
-  element.send_keys(Keys.ENTER)
+# Display the current URL
+# print("Current URL:", current_url)
 
-  # Find the ul element containing the branch names
-  ul_element = element.find_element(By.XPATH, "//ul[@class='MuiList-root MuiList-padding MuiMenu-list css-6hp17o-MuiList-root-MuiMenu-list']")
+page_jobs_source = driver.page_source
 
-  # Find all the li elements within the ul element
-  li_elements = ul_element.find_elements(By.TAG_NAME, "li")
+soup = BeautifulSoup(page_jobs_source, 'html.parser')
 
-  # Iterate over the li elements and print their text
-  branch_Name="Eligibility: "
-  for li in li_elements:
-      branch_name = li.text
-      if branch_name and branch_name != "Eligibility":
-          branch_Name+=branches[branch_name]+", "
+# Find all div elements with a specific class name
+div_elements = soup.find_all('div', class_='css-wdtwov-MuiGrid-root')
 
-  current_job+=fdes+jdes+"\n"+branch_Name+"\n";
+div_elements_first_three = div_elements[:3]
+latest_job = div_elements[0]
+rev_div_elements = div_elements_first_three[::-1]
+all_data += "--------Jobs Updated--------\n"
+# Iterate over the div elements and perform actions
+div=latest_job
+# for div in rev_div_elements:
+# Perform actions on each div element
+companyname = div.find('div', class_='css-dsnyvo')
+companystatus = div.find('div', class_='css-155ff3i')
+p_job_status = companystatus.find_all(
+  'p', class_="css-ahj2mt-MuiTypography-root")
+nam = "Name: " + companyname.h5.text + "\n"
 
-  driver.back()
-  all_data += current_job + "---------------------------------\n\n"
-  # current_job+="djbvjief"
-  if previous_job == current_job:
-    previous_job = current_job
-  else:
-    previous_job = current_job
-    jobmessage = "New Job Posted"+ "\n---------------------------------\n"
-    scraped_data = jobmessage + current_job + "---------------------------------\n"
-    for user_id in user_ids:
-      update(user_id,scraped_data)
-    if scraped_data is not None:
-      bot.send_message(chat_id="@rmnotices", text=scraped_data)
+# Print the name and status
+ptot = ""
+for job_status in p_job_status:
+  ptot += "" + job_status.text + "" + "\n"
+current_job = nam + ptot
+print("Know More")
+KMore = driver.find_element(By.XPATH, '/html/body/div/div/div[3]/div/div/div/div[1]/div/div/div[2]/div/div[1]/div/div/div[2]/a[1]/button')
+KMore.send_keys(Keys.ENTER)
+time.sleep(5)
+current_url = driver.current_url
+print(current_url)
 
-  # print("all_data", all_data)
-  # print("scraped_data", scraped_data)
-  print(user_ids)
-  # Close the browser
-  # scraped_data="hfuyfuky"
-  driver.quit()
+page_jobs_source = driver.page_source
+soup = BeautifulSoup(page_jobs_source, 'html.parser')
+# Extract form link and close date
+form_link = soup.find('p',class_='MuiTypography-root MuiTypography-body1 css-ahj2mt-MuiTypography-root').text
+
+fdes=form_link
+# Extract close date from form
+# close_date = soup.find_all('p', class_='MuiTypography-root MuiTypography-body1 css-1qqynwt-MuiTypography-root')
+# ctime=""
+
+# for close_date in close_date:
+#     ctime+= close_date.text+"\n"
+
+# Extract job description
+anchor_element = soup.find('a')
+link = anchor_element['href']
+job_description = soup.find('p', class_="MuiTypography-root MuiTypography-body1 css-z2eky3-MuiTypography-root").text
+jdes=job_description
+print(jdes)
+# Display the extracted job description
+
+# Find the dropdown menu element (div)
+wait = WebDriverWait(driver, 10)  # Set an appropriate waiting time
+# Locate the element and wait until it is clickable
+element = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div/div/div[3]/div/div/div/div[8]/table/tbody/tr[1]/td[2]/div/div/div/div")))
+
+# Click on the element
+element.send_keys(Keys.ENTER)
+
+# Find the ul element containing the branch names
+ul_element = element.find_element(By.XPATH, "//ul[@class='MuiList-root MuiList-padding MuiMenu-list css-6hp17o-MuiList-root-MuiMenu-list']")
+
+# Find all the li elements within the ul element
+li_elements = ul_element.find_elements(By.TAG_NAME, "li")
+
+# Iterate over the li elements and print their text
+branch_Name="Eligibility: "
+for li in li_elements:
+    branch_name = li.text
+    if branch_name and branch_name != "Eligibility":
+        branch_Name+=branches[branch_name]+", "
+
+current_job+=fdes+jdes+"\n"+branch_Name+"\n";
+
+driver.back()
+all_data += current_job + "---------------------------------\n\n"
+# current_job+="djbvjief"
+if previous_job == current_job:
+  previous_job = current_job
+else:
+  previous_job = current_job
+  jobmessage = "New Job Posted"+ "\n---------------------------------\n"
+  scraped_data = jobmessage + current_job + "---------------------------------\n"
+  for user_id in user_ids:
+    update(user_id,scraped_data)
+  if scraped_data is not None:
+    bot.send_message(chat_id="@rmnotices", text=scraped_data)
+
+# print("all_data", all_data)
+# print("scraped_data", scraped_data)
+print(user_ids)
+# Close the browser
+# scraped_data="hfuyfuky"
+driver.quit()
 
 
-# Function to schedule the scraping task
-def task_function():
-    global user_ids;
-    while True:
-        # Call the task function
-        jobs_updates()
-        # Wait for 60 seconds before running the task again
-        time.sleep(60)
+# # Function to schedule the scraping task
+# def task_function():
+#     global user_ids;
+#     while True:
+#         # Call the task function
+#         jobs_updates()
+#         # Wait for 60 seconds before running the task again
+#         time.sleep(60)
 
-# Create a new thread for running the task function
-task_thread = threading.Thread(target=task_function)
-task_thread.daemon = True  # Set the thread as a daemon thread
+# # Create a new thread for running the task function
+# task_thread = threading.Thread(target=task_function)
+# task_thread.daemon = True  # Set the thread as a daemon thread
 
-# Start the task thread
-task_thread.start()
+# # Start the task thread
+# task_thread.start()
 
 # Start the bot polling
 bot.polling()

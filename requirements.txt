@@ -1,0 +1,5 @@
+pymongo
+telebot
+selenium
+openai
+bs4
