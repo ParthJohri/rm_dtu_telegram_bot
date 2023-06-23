@@ -403,20 +403,20 @@ driver.quit()
 
 
 # Function to schedule the scraping task
-def task_function():
-    global user_ids;
-    while True:
-        # Call the task function
-        jobs_updates()
-        # Wait for 60 seconds before running the task again
-        time.sleep(60)
+# def task_function():
+#     global user_ids;
+#     while True:
+#         # Call the task function
+#         jobs_updates()
+#         # Wait for 60 seconds before running the task again
+#         time.sleep(60)
 
-# Create a new thread for running the task function
-task_thread = threading.Thread(target=task_function)
-task_thread.daemon = True  # Set the thread as a daemon thread
+# # Create a new thread for running the task function
+# task_thread = threading.Thread(target=task_function)
+# task_thread.daemon = True  # Set the thread as a daemon thread
 
-# Start the task thread
-task_thread.start()
+# # Start the task thread
+# task_thread.start()
 
 # Start the bot polling
 bot.polling()
