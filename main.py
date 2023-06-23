@@ -11,7 +11,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from dotenv import load_dotenv
 
+load_dotenv() 
 DB_USERNAME = os.environ['DATABASE']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 openai.api_key = os.environ['OPEN_AI_KEY']
@@ -224,8 +226,8 @@ secure_url = ('https://www.rm.dtu.ac.in/app/dashboard')
 
 # Login Credentials
 
-rollNo = str(os.environ('ROLLN'))
-password = str(os.environ('PASSW'))
+rollNo = str(os.environ['ROLLN'])
+password = str(os.environ['PASSW'])
 
 # Navigate to the desired website
 driver.get(loginurl)
