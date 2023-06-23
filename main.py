@@ -217,7 +217,7 @@ chrome_options.add_argument("--window-size=1920,1080")
 chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--headless')
 chrome_options.add_argument('--disable-dev-shm-usage')
-driver = webdriver.Chrome(options=chrome_options)
+driver = webdriver.Chrome('/usr/local/bin/chromedriver',options=chrome_options)
 
 # global scraped_data, previous_db, previous_job, all_data, user_ids, branches
 
