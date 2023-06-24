@@ -419,6 +419,12 @@ driver.quit()
 # task_thread.start()
 
 # Start the bot polling
-bot.polling()
+while True:
+    try:
+        bot.polling(non_stop=True, interval=0)
+    except Exception as e:
+        print(e)
+        time.sleep(5)
+        continue
 
 # The program will continue running here while the bot is polling and the task thread is running in the background
