@@ -24,30 +24,6 @@ openai.api_key = os.environ['OPEN_AI_KEY']
 client = pymongo.MongoClient(f"mongodb+srv://{DB_USERNAME}:{DB_PASSWORD}@cluster0.1e3sslc.mongodb.net/?retryWrites=true&w=majority")
 db=client.learning_mongodb
 
-
-# Define a function to test the API
-# def test_openai_api():
-#     try:
-#         # Make a test API call
-#         response = openai.Completion.create(
-#             engine='davinci',
-#             prompt='Hello, world!',
-#             max_tokens=5
-#         )
-#         return True
-#     except Exception as e:
-#         print(f"OpenAI API test failed: {str(e)}")
-#         return False
-
-# Call the test function
-# if test_openai_api():
-#     print("OpenAI API is working!")
-# else:
-#     print("OpenAI API is not working.")
-# player_info=db.player.find({})
-# print(list(player_info))
-
-
 # Global Variables
 scraped_data = None
 all_data = None
@@ -72,18 +48,28 @@ branches = {
     "Software Engineering": "SE"
 }
 
+collection = db['jobs']
+last_document = db.jobs.find_one()  
+
+print(last_document);
+if last_document is None:
+    previous_db = None
+    previous_job = None
+else:
+    previous_db = last_document.get('previousdata')  
+    previous_job = last_document.get('previousjob')  
+
+        
 user_ids = []
 
 APIKEY = os.environ['API_KEY']
 bot = telebot.TeleBot(APIKEY)
 
-# Function to get user IDs from the database
 user_ids_dict = list(db.user.find({}, {"_id": 0, "userid": 1}))
 user_ids = list(map(lambda item: item["userid"], user_ids_dict))
 
 print("userids",user_ids)
 
-# Post the data to your channel
 channel_id = 'CHANNEL_ID'
 @bot.message_handler(commands=['check'])
 
@@ -110,22 +96,31 @@ def update(user_id, data):
           bot.send_message(user_id, data, parse_mode="HTML")
 
 
-# Handler for the command to ask for permission
 @bot.message_handler(commands=['permission'])
 def ask_permission(message):
-  global user_ids
-  user_ids_dict = list(db.user.find({}, {"_id": 0, "userid": 1}))
-  user_ids = list(map(lambda item: item["userid"], user_ids_dict))
-  user_id = message.chat.id
-  if user_id not in user_ids:
-    bot.reply_to(message,
-                 '<b>You have granted permission to receive automated messages.</b>',parse_mode="HTML")
-    db.user.insert_one({"userid": user_id})
-  else:
-    bot.reply_to(message, '<b>You have already granted permission.</b>',parse_mode="HTML")
+    global user_ids
+    user_ids_dict = list(db.user.find({}, {"_id": 0, "userid": 1}))
+    user_ids = list(map(lambda item: item["userid"], user_ids_dict))
+    user_id = message.chat.id
+
+    if user_id not in user_ids:
+        bot.reply_to(message, 'Please enter your <b>DTU mail ID</b>:',parse_mode="HTML")
+        
+        bot.register_next_step_handler(message, process_mail_id)
+    else:
+        bot.reply_to(message, '<b>You have already granted permission.</b>', parse_mode="HTML")
 
 
-# Handler for the command to revoke permission
+def process_mail_id(message):
+    user_id = message.chat.id
+    mail_id = message.text.strip()
+    reg= os.environ['REGEXP']
+    if re.search(reg, mail_id):
+        bot.reply_to(message, '<b>You have granted permission to receive automated messages.</b>', parse_mode="HTML")
+        db.user.insert_one({"userid": user_id, "mailid": mail_id})
+    else:
+        bot.reply_to(message, '<b>Permission not granted. Please provide a valid DTU mail ID</b>', parse_mode="HTML")
+
 @bot.message_handler(commands=['revoke'])
 def revoke_permission(message):
   global user_ids
@@ -149,13 +144,10 @@ def handle_start(message):
     '<b>/permission -</b> Permitting the bot to send you messages after every hour',
     '<b>/revoke -</b> Revoke your permission', '/update - New Jobs/ Updates',
     '<b>/search -</b> Search for your Query'
-    # Add more commands here
   ]
 
-  # Format the commands as a string
   commands_text = '\n'.join(commands)
 
-  # Send the commands to the user
   bot.send_message(message.chat.id, f'<b>Available commands:</b>\n{commands_text}',parse_mode="HTML")
 
 
@@ -203,22 +195,18 @@ def handle_callback(call):
     command = call.data
 
     if command == 'permission':
-        # Handle command 1
       bot.send_message(call.message.chat.id, "Permission")
       ask_permission(call.message)
 
     elif command == 'revoke':
-        # Handle command 2
       bot.send_message(call.message.chat.id, "Revoke")
       revoke_permission(call.message)
 
     elif command == 'update':
-        # Handle command 3
       bot.send_message(call.message.chat.id, "Update")
       update(call.message)
 
     elif command == 'search':
-        # Handle command 4
       bot.send_message(call.message.chat.id, "Search")
       search(call.message)
 
@@ -235,11 +223,13 @@ def scrape_function():
     loginurl = ('https://rm.dtu.ac.in/api/auth/login')
     secure_url = ('https://www.rm.dtu.ac.in/app/dashboard')
 
+    print(previous_db);
+    print(previous_job);
     # Login Credentials
 
     rollNo = str(os.environ['ROLLN'])
     password = str(os.environ['PASSW'])
-
+    
     # Navigate to the desired website
     driver.get(loginurl)
 
@@ -274,28 +264,64 @@ def scrape_function():
     # Find all div elements with a specific class name
     div_elements = soup.find_all('div', class_='css-wdtwov-MuiGrid-root')
 
-    div_elements_first_three = div_elements[:2]
+    div_elements_first_three = div_elements[:3]
 
-    rev_div_elements = div_elements_first_three[::-1]
-    all_data = "<b>RM Dashboard</b>\n"
+    all_data = "<b>🚀 RM Dashboard 📊</b>\n\n"
     # Iterate over the div elements and perform actions
-    for div in rev_div_elements:
+    serial_number =1
+    flag=True;
+    for div in div_elements_first_three:
       # Perform actions on each div element
       companyname = div.find('p', class_='css-1v1tjum-MuiTypography-root').text
       companystatus = div.find_all('p', class_='css-ahj2mt-MuiTypography-root')
       # Print the name and status
-      nm = "Name : " + companyname + "\n"
+      emoji_bullet = "🔹"  # Emoji bullet point
+      nm = f"{emoji_bullet} <b>Name :</b> <i>{companyname}</i>\n\n"
       pt = ""
+      serial_number += 1
       for p in companystatus:
-        pt += p.text + "\n"
-      current_db = nm + pt + "\n"
-      all_data += current_db 
-    if previous_db == current_db:
+        text = p.text.lstrip()  # Remove leading whitespaces
+        emoji = ""
+        detail = text
+        if text.startswith("Name"):
+            emoji = "✨ "
+        elif text.startswith("Posted on"):
+            emoji = "📅 "
+        elif text.startswith("Deadline to Apply"):
+            emoji = "⏰ "
+        elif text.startswith("CutOff"):
+            emoji = "🎓 "
+        elif text.startswith("Stipend"):
+            emoji = "💰 "
+        elif text.startswith("Job Description"):
+            emoji = "🌟 "
+        elif text.startswith("Contact"):
+            emoji = "📞 "
+        elif text.startswith("Updated the job posted"):
+            emoji = "🌟 "
+        elif text.startswith("New job posted"):
+            emoji = "📌 "
+        if ':' in detail:
+            split_str = detail.split(':', 1)
+            first_part = split_str[0].strip() 
+            second_part = split_str[1].strip()  
+            finaldetail = f"<b>{first_part} :</b> <i>{second_part}</i>"
+        else:
+            print("Invalid input: No colon found in the string.")
+            finaldetail = f"<i>{detail}</i>"
+        pt += f"{emoji} {finaldetail}\n\n"
+      
+      temp=nm+pt;
+      if(flag):
+        current_db = nm + pt 
+        flag=False;
+      all_data += temp;
+    if current_db == previous_db:
       previous_db = current_db
     else:
       previous_db = current_db
-      rmmessage = "<b>RM Dashboard</b>\n"
-      scraped_data = rmmessage + current_db + "\n"
+      rmmessage = "<b>🚀 RM Dashboard 📊</b>\n\n"
+      scraped_data = rmmessage + current_db
       for user_id in user_ids:
         update(user_id,scraped_data)
 
@@ -320,10 +346,8 @@ def scrape_function():
     div_elements_first_three = div_elements[:3]
     latest_job = div_elements[0]
     rev_div_elements = div_elements_first_three[::-1]
-    
-    
-    
-    all_data += "<b>Jobs Updated</b>\n"
+    all_data += "-----------------------------------------------------------------\n\n"
+    all_data += "<b>🔔 Jobs Updated 🔔</b>\n\n"
     # Iterate over the div elements and perform actions
     div=latest_job
     # for div in rev_div_elements:
@@ -332,13 +356,42 @@ def scrape_function():
     companystatus = div.find('div', class_='css-155ff3i')
     p_job_status = companystatus.find_all(
       'p', class_="css-ahj2mt-MuiTypography-root")
-    nam = f"Name : {companyname.h5.text}\n"
+    nam = f"✨ <b>Name :</b> <i>{companyname.h5.text}</i>\n\n"
 
     # Print the name and status
-    ptot = ""
-    for job_status in p_job_status:
-      ptot += "" + job_status.text + "" + "\n"
-    current_job = nam + ptot
+    pt = ""
+    for p in p_job_status:
+      text = p.text.lstrip()  # Remove leading whitespaces
+      emoji = ""
+      detail = text
+      
+      if text.startswith("Name"):
+          emoji = "✨ "
+      elif text.startswith("Posted on"):
+          emoji = "📅 "
+      elif text.startswith("Deadline to Apply"):
+          emoji = "⏰ "
+      elif text.startswith("CutOff"):
+          emoji = "🎓 "
+      elif text.startswith("Stipend"):
+          emoji = "💰 "
+      elif text.startswith("Job Description"):
+          emoji = "🌟 "
+      elif text.startswith("Contact"):
+          emoji = "📞 "
+      elif text.startswith("Updated the job posted"):
+          emoji = "🌟 "
+      
+      if ':' in detail:
+            split_str = detail.split(':', 1)
+            first_part = split_str[0].strip() 
+            second_part = split_str[1].strip()  
+            finaldetail = f"<b>{first_part} :</b> <i>{second_part}</i>"
+      else:
+            print("Invalid input: No colon found in the string.")
+            finaldetail = f"<i>{detail}</i>"
+      pt += f"{emoji} {finaldetail}\n\n"
+    current_job = nam + pt
     
     print("Know More")
     KMore = driver.find_element(By.XPATH, '/html/body/div/div/div[3]/div/div/div/div[1]/div/div/div[2]/div/div[1]/div/div/div[2]/a[1]/button')
@@ -349,18 +402,34 @@ def scrape_function():
 
     page_jobs_source = driver.page_source
     soup = BeautifulSoup(page_jobs_source, 'html.parser')
-    # Extract form link and close date
-    form_link = soup.find('p',class_='MuiTypography-root MuiTypography-body1 css-ahj2mt-MuiTypography-root').text
 
-    fdes=form_link
+    # Find all elements with the specified class
+    p_elements = soup.find_all('p', class_='MuiTypography-root MuiTypography-body1 css-ahj2mt-MuiTypography-root')
 
+    if len(p_elements) > 1:
+        second_p_element = p_elements[1]
+        form_link = second_p_element.find('a')['href'] if second_p_element.find('a') else "N/A"
+    else:
+        form_link = "N/A"
+
+    fdes = "📝 <b>Form Link :</b> "+form_link +"\n\n"
 
     # Extract job description
     anchor_element = soup.find('a')
     link = anchor_element['href']
     job_description = soup.find('p', class_="MuiTypography-root MuiTypography-body1 css-z2eky3-MuiTypography-root").text
-    jdes=job_description
-    print(jdes)
+    jdes = "🌟 " + job_description + "\n\n"
+    jdes = f"<b>{jdes.split(':', 1)[0].strip()} :</b> <i>{jdes.split(':', 1)[1].strip()}</i>\n\n" if ':' in jdes else jdes
+
+    P12th = "🎓 " + p_elements[4].text + "\n\n"
+    P12th = f"<b>{P12th.split(':', 1)[0].strip()} :</b> <i>{P12th.split(':', 1)[1].strip()}</i>\n\n" if ':' in P12th else P12th
+
+    P10th = "🏫 " + p_elements[5].text + "\n\n"
+    P10th = f"<b>{P10th.split(':', 1)[0].strip()} :</b> <i>{P10th.split(':', 1)[1].strip()}</i>\n\n" if ':' in P10th else P10th
+
+    Backlogs = "📚 " + p_elements[6].text + "\n\n"
+    Backlogs = f"<b>{Backlogs.split(':', 1)[0].strip()} :</b> <i>{Backlogs.split(':', 1)[1].strip()}</i>\n\n" if ':' in Backlogs else Backlogs
+
 
     wait = WebDriverWait(driver, 10)  # Set an appropriate waiting time
     element = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div/div/div[3]/div/div/div/div[8]/table/tbody/tr[1]/td[2]/div/div/div/div")))
@@ -371,28 +440,28 @@ def scrape_function():
 
     li_elements = ul_element.find_elements(By.TAG_NAME, "li")
 
-    # branch_Name="Eligibility: "
-    # for li in li_elements:
-    #     branch_name = li.text
-    #     if branch_name and branch_name != "Eligibility":
-    #         branch_Name+=branches[branch_name]+", "
-
-    current_job+=fdes+jdes+"\n"+"\n";
+    current_job+=fdes+jdes +P12th +P10th +Backlogs;
 
     driver.back()
     all_data += current_job + "\n"
     # current_job+="djbvjief"
-    if previous_job == current_job:
+    if current_job == previous_job:
       previous_job = current_job
     else:
       previous_job = current_job
-      jobmessage = f"<b>New Job Posted</b> \n" 
-      scraped_data = jobmessage + current_job + "\n"
+      jobmessage = f"<b>🔥 New Job Posted 🔥</b> \n\n" 
+      scraped_data = jobmessage + current_job + "\n\n"
       for user_id in user_ids:
         update(user_id,scraped_data)
       if scraped_data is not None:
         bot.send_message(chat_id="@rmnotices", text=scraped_data)
-
+        
+    db.jobs.insert_one({
+    "previousdata": current_db,
+    "previousjob": current_job})
+    print(current_db)
+    print("\n")
+    print(current_job)
     print(user_ids)
     driver.quit()
 
